@@ -34,7 +34,7 @@ return {
 				"harper_ls",
 				"jdtls",
 				"pyright",
-				"tsserver"
+				"ts_ls"
 
 			},
 			handlers = {
