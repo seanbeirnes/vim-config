@@ -53,21 +53,9 @@ return {
 							}
 						}
 					}
-				end,
-				["harper_ls"] = function()
-					local lspconfig = require("lspconfig")
-					lspconfig.harper_ls.setup {
-						settings = {
-							["harper-ls"] = {
-								userDictPath = "~/dict.txt"
-							}
-						}
-					}
 				end
 			}
 		})
-
-		local cmp_select = { behavior = cmp.SelectBehavior.Select }
 
 		cmp.setup({
 			snippet = {
@@ -75,11 +63,15 @@ return {
 					require('luasnip').lsp_expand(args.body) -- For `luasnip` users.
 				end,
 			},
-			mapping = cmp.mapping.preset.insert({
-				['<C-p>'] = cmp.mapping.select_prev_item(cmp_select),
-				['<C-n>'] = cmp.mapping.select_next_item(cmp_select),
-				['<C-y>'] = cmp.mapping.confirm({ select = true }),
-				["<C-Space>"] = cmp.mapping.complete(),
+            mapping = cmp.mapping.preset.insert({
+                ['<Tab>'] = function(fallback)
+                    if cmp.visible() then
+                        cmp.confirm()
+                    else
+                        fallback()
+                    end
+                end,
+                ["<C-Space>"] = cmp.mapping.complete(),
 			}),
 			sources = cmp.config.sources({
 				{ name = 'nvim_lsp' },
