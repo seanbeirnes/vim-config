@@ -31,7 +31,7 @@ return {
 				"clangd",
 				"cssls",
 				"gopls",
-				"harper_ls",
+                "html",
 				"jdtls",
 				"pyright",
 				"ts_ls"
