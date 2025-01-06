@@ -34,7 +34,8 @@ return {
                 "html",
 				"jdtls",
 				"pyright",
-				"ts_ls"
+				"ts_ls",
+                "tailwindcss"
 
 			},
 			handlers = {
