@@ -7,7 +7,7 @@ return {
 	    ensure_installed = {
 		    "bash", "c", "c_sharp", "cpp", "css", "dockerfile", "go", "html", "java", "javascript", "jsdoc", 
 		    "json", "lua", "markdown", "markdown_inline", "php", "prolog", "python", "ruby", "rust", "sql",
-		    "typescript", "vim", "vimdoc", "xml", "yaml"
+		    "templ", "toml", "typescript", "vim", "vimdoc", "xml", "yaml"
 	    },
 
             -- Install parsers synchronously (only applied to `ensure_installed`)
@@ -32,14 +32,5 @@ return {
                 additional_vim_regex_highlighting = { "markdown" },
             },
         })
-
-        local treesitter_parser_config = require("nvim-treesitter.parsers").get_parser_configs()
-        treesitter_parser_config.templ = {
-            install_info = {
-                url = "https://github.com/vrischmann/tree-sitter-templ.git",
-                files = {"src/parser.c", "src/scanner.c"},
-                branch = "master",
-            },
-        }
     end
 }
