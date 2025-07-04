@@ -44,7 +44,7 @@ vim.keymap.set(
 vim.keymap.set(
     "n",
     "<leader>ef",
-    "oif err != nil {<CR>}<Esc>Olog.Fatalf(\"error: %s\\n\", err.Error())<Esc>jj"
+    "oif err != nil {<CR>}<Esc>Olog.Fatalf(\"[ERROR]: %s\\n\", err.Error())<Esc>jj"
 )
 
 vim.keymap.set(
