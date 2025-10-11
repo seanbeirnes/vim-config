@@ -65,7 +65,7 @@ return {
 				end,
 			},
             mapping = cmp.mapping.preset.insert({
-                ['<Tab>'] = function(fallback)
+                ['<C-y>'] = function(fallback)
                     if cmp.visible() then
                         cmp.confirm()
                     else
