@@ -28,7 +28,6 @@ return {
 			ensure_installed = {
 				"bashls",
 				"biome",
-				"clangd",
 				"cssls",
 				"gopls",
                 "html",
