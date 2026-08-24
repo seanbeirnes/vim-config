@@ -1,37 +1,62 @@
+local parsers = {
+    "bash",
+    "c",
+    "c_sharp",
+    "cpp",
+    "css",
+    "dockerfile",
+    "go",
+    "html",
+    "java",
+    "javascript",
+    "jsdoc",
+    "json",
+    "lua",
+    "markdown",
+    "markdown_inline",
+    "php",
+    "python",
+    "ruby",
+    "rust",
+    "sql",
+    "templ",
+    "toml",
+    "typescript",
+    "vim",
+    "vimdoc",
+    "xml",
+    "yaml",
+}
+
+local configured_parsers = {}
+for _, parser in ipairs(parsers) do
+    configured_parsers[parser] = true
+end
+
 return {
     "nvim-treesitter/nvim-treesitter",
-    branch = "master",
+    branch = "main",
+    lazy = false,
     build = ":TSUpdate",
     config = function()
-        require("nvim-treesitter.configs").setup({
-            -- A list of parser names, or "all"
-	    ensure_installed = {
-		    "bash", "c", "c_sharp", "cpp", "css", "dockerfile", "go", "html", "java", "javascript", "jsdoc", 
-		    "json", "lua", "markdown", "markdown_inline", "php", "prolog", "python", "ruby", "rust", "sql",
-		    "templ", "toml", "typescript", "vim", "vimdoc", "xml", "yaml"
-	    },
+        require("nvim-treesitter").install(parsers)
 
-            -- Install parsers synchronously (only applied to `ensure_installed`)
-            sync_install = false,
+        vim.api.nvim_create_autocmd("FileType", {
+            callback = function(args)
+                local language = vim.treesitter.language.get_lang(args.match) or args.match
+                if not configured_parsers[language] then
+                    return
+                end
 
-            -- Automatically install missing parsers when entering buffer
-            -- Recommendation: set to false if you don"t have `tree-sitter` CLI installed locally
-            auto_install = true,
+                local started = pcall(vim.treesitter.start, args.buf, language)
+                if started then
+                    vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+                end
 
-            indent = {
-                enable = true
-            },
-
-            highlight = {
-                -- `false` will disable the whole extension
-                enable = true,
-
-                -- Setting this to true will run `:h syntax` and tree-sitter at the same time.
-                -- Set this to `true` if you depend on "syntax" being enabled (like for indentation).
-                -- Using this option may slow down your editor, and you may see some duplicate highlights.
-                -- Instead of true it can also be a list of languages
-                additional_vim_regex_highlighting = { "markdown" },
-            },
+                if args.match == "markdown" then
+                    vim.bo[args.buf].syntax = "markdown"
+                end
+            end,
         })
-    end
+    end,
 }
