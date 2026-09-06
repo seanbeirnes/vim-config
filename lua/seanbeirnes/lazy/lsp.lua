@@ -33,7 +33,7 @@ return {
                 "html",
 				"jdtls",
 				"pyright",
-				"ts_ls",
+				"tsc",
                 "tailwindcss"
 
 			},
