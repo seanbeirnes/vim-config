@@ -10,7 +10,7 @@ return {
     },
 
     config = function()
-        local cmp = require('cmp')
+        local cmp = require("cmp")
 
         -- applies to every server; per-server overrides go in
         -- vim.lsp.config("<server>", { ... })
@@ -59,10 +59,10 @@ return {
                 ["<C-Space>"] = cmp.mapping.complete(),
             }),
             sources = cmp.config.sources({
-                { name = 'nvim_lsp' },
+                { name = "nvim_lsp" },
             }, {
-                { name = 'buffer' },
-            })
+                { name = "buffer" },
+            }),
         })
-    end
+    end,
 }

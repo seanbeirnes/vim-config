@@ -13,6 +13,6 @@ return {
         priority = 1000,
         config = function()
             ColorMyPencils()
-        end
-    }
+        end,
+    },
 }
