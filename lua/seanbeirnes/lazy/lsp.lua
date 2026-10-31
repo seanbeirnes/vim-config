@@ -11,47 +11,41 @@ return {
 
 	config = function()
 		local cmp = require('cmp')
-		local cmp_lsp = require("cmp_nvim_lsp")
-		local capabilities = vim.tbl_deep_extend(
-			"force",
-			{},
-			vim.lsp.protocol.make_client_capabilities(),
-			cmp_lsp.default_capabilities())
+
+		-- applies to every server; per-server overrides go in
+		-- vim.lsp.config("<server>", { ... })
+		vim.lsp.config("*", {
+			capabilities = require("cmp_nvim_lsp").default_capabilities(),
+		})
 
 		require("fidget").setup({})
 		require("mason").setup()
+		-- installs these servers and enables every server Mason has installed
 		require("mason-lspconfig").setup({
 			ensure_installed = {
 				"bashls",
 				"biome",
 				"cssls",
+				"docker_language_server",
 				"gopls",
-                "html",
-				"jdtls",
+				"html",
 				"pyright",
+				"ruff",
 				"tsc",
-                "tailwindcss"
-
+				"tailwindcss",
 			},
-			handlers = {
-				function(server_name) -- default handler (optional)
-					require("lspconfig")[server_name].setup {
-						capabilities = capabilities
-					}
-				end,
-				bashls = function()
-					local lspconfig = require("lspconfig")
-					lspconfig.bashls.setup {
-						capabilities = capabilities,
-						settings = {
-							bashIde = {
-								globPattern = "*@(.sh|.inc|.bash|.command)"
-							}
-						}
-					}
-				end
-			}
 		})
+
+		-- non-LSP tools: shellcheck powers bashls diagnostics, shfmt formats shell
+		local registry = require("mason-registry")
+		registry.refresh(function()
+			for _, name in ipairs({ "shellcheck", "shfmt" }) do
+				local ok, pkg = pcall(registry.get_package, name)
+				if ok and not pkg:is_installed() then
+					pkg:install()
+				end
+			end
+		end)
 
 		cmp.setup({
 			snippet = {

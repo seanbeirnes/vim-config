@@ -29,6 +29,8 @@ return {
             markdown = web,
             yaml = web,
             html = html,
+            sh = { "shfmt" },
+            bash = { "shfmt" },
         },
         formatters = {
             -- only run when the project actually has a config for them
