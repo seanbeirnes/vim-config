@@ -52,11 +52,16 @@ own formatter so the result matches the repo's config:
 | JS, TS, JSX, TSX, JSON, CSS, SCSS, Markdown, YAML | Biome, else Prettier |
 | HTML | Prettier, else Biome |
 | Shell | `shfmt` |
+| Lua | StyLua, automatically on save |
 | Everything else | The language server |
 
 Biome and Prettier only run when the project has a config file for them
 (`biome.json`, `.prettierrc`, etc.), and use the project's installed version
 when available. Otherwise formatting falls back to the language server.
+
+StyLua also only runs in repos with a `stylua.toml` or `.stylua.toml`. This
+repo's config pins 4-space indentation, and CI checks every push and PR with
+`stylua --check`.
 
 Run `:ConformInfo` to see which formatter applies to the current buffer.
 

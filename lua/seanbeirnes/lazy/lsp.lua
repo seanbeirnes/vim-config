@@ -36,10 +36,11 @@ return {
             },
         })
 
-        -- non-LSP tools: shellcheck powers bashls diagnostics, shfmt formats shell
+        -- non-LSP tools: shellcheck powers bashls diagnostics, shfmt formats shell,
+        -- stylua formats Lua
         local registry = require("mason-registry")
         registry.refresh(function()
-            for _, name in ipairs({ "shellcheck", "shfmt" }) do
+            for _, name in ipairs({ "shellcheck", "shfmt", "stylua" }) do
                 local ok, pkg = pcall(registry.get_package, name)
                 if ok and not pkg:is_installed() then
                     pkg:install()
