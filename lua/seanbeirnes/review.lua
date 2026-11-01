@@ -1,6 +1,7 @@
 -- PR review mode: diff every buffer against the merge base with the default
--- branch (same comparison as GitHub's "Files changed"), with line highlights
--- and inline deleted lines, plus a Telescope picker of the PR's changed files.
+-- branch (same comparison as GitHub's "Files changed"), with line and word
+-- highlights and inline deleted lines, plus a Telescope picker of the PR's
+-- changed files.
 local M = {}
 
 local state = { enabled = false, base = nil, branch = nil }
@@ -55,6 +56,7 @@ function M.enable()
     local gitsigns = require("gitsigns")
     gitsigns.change_base(base, true)
     gitsigns.toggle_linehl(true)
+    gitsigns.toggle_word_diff(true)
     set_deleted(gitsigns, true)
     state = { enabled = true, base = base, branch = branch }
     vim.notify(("Review mode on: diffing against %s (%s)"):format(branch, base:sub(1, 7)))
@@ -65,6 +67,7 @@ function M.disable()
     local gitsigns = require("gitsigns")
     gitsigns.reset_base(true)
     gitsigns.toggle_linehl(false)
+    gitsigns.toggle_word_diff(false)
     set_deleted(gitsigns, false)
     state = { enabled = false }
     vim.notify("Review mode off")
@@ -110,23 +113,46 @@ local function full_diff(base, path, old_path)
     return lines, first_change
 end
 
+-- lines added/removed per file, keyed by (new) path; binary files are nil
+local function line_counts(base)
+    local out = git({ "diff", "--numstat", "-M", "-z", base }) or ""
+    local fields = vim.split(out, "\0", { plain = true })
+    local counts, i = {}, 1
+    while i <= #fields do
+        local added, removed, path = fields[i]:match("^(%S+)\t(%S+)\t(.*)$")
+        if not added then
+            break
+        end
+        if path == "" then
+            -- rename: the old and new paths follow as separate fields
+            path = fields[i + 2]
+            i = i + 3
+        else
+            i = i + 1
+        end
+        counts[path] = { added = tonumber(added), removed = tonumber(removed) }
+    end
+    return counts
+end
+
 local function changed_files(base)
     local out = git({ "diff", "--name-status", "-M", "--diff-filter=d", base })
+    local counts = line_counts(base)
     local files = {}
     for _, line in ipairs(vim.split(out or "", "\n", { trimempty = true })) do
         local parts = vim.split(line, "\t", { plain = true })
         local status = parts[1]:sub(1, 1)
-        if status == "R" then
-            table.insert(files, { status = status, path = parts[3], old_path = parts[2] })
-        else
-            table.insert(files, { status = status, path = parts[2] })
-        end
+        local file = status == "R" and { status = status, path = parts[3], old_path = parts[2] }
+            or { status = status, path = parts[2] }
+        file.counts = counts[file.path]
+        table.insert(files, file)
     end
     -- untracked files are part of the working tree too
     for _, path in
         ipairs(vim.split(git({ "ls-files", "--others", "--exclude-standard" }) or "", "\n", { trimempty = true }))
     do
-        table.insert(files, { status = "?", path = path })
+        local ok, lines = pcall(vim.fn.readfile, path)
+        table.insert(files, { status = "?", path = path, counts = { added = ok and #lines or 0, removed = 0 } })
     end
     return files
 end
@@ -150,16 +176,29 @@ function M.pick()
     local devicons_ok, devicons = pcall(require, "nvim-web-devicons")
 
     local status_hl = { A = "GitSignsAdd", M = "GitSignsChange", R = "GitSignsChange", ["?"] = "GitSignsUntracked" }
-    local displayer = entry_display.create({
-        separator = " ",
-        items = { { width = 1 }, { width = 2 }, { remaining = true } },
-    })
-
     local files = changed_files(base)
     if #files == 0 then
         vim.notify("Review mode: no changes against " .. state.branch)
         return
     end
+
+    -- "+12 -3" columns, sized to the widest count
+    local function fmt_counts(file)
+        local c = file.counts
+        if not (c and c.added) then
+            return "bin", ""
+        end
+        return "+" .. c.added, "-" .. c.removed
+    end
+    local add_w, del_w = 0, 0
+    for _, file in ipairs(files) do
+        local a, d = fmt_counts(file)
+        add_w, del_w = math.max(add_w, #a), math.max(del_w, #d)
+    end
+    local displayer = entry_display.create({
+        separator = " ",
+        items = { { width = 1 }, { width = 2 }, { width = add_w }, { width = del_w }, { remaining = true } },
+    })
 
     pickers
         .new({}, {
@@ -177,9 +216,12 @@ function M.pick()
                         ordinal = file.path,
                         path = file.path,
                         display = function()
+                            local added, removed = fmt_counts(file)
                             return displayer({
                                 { file.status, status_hl[file.status] },
                                 { icon, icon_hl },
+                                { added, "GitSignsAdd" },
+                                { removed, "GitSignsDelete" },
                                 file.path,
                             })
                         end,
