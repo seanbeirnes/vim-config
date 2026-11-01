@@ -9,6 +9,8 @@ vim.opt.expandtab = true
 vim.opt.smartindent = true
 
 vim.opt.wrap = false
+-- when wrap is toggled on, break lines between words, not mid-word
+vim.opt.linebreak = true
 
 vim.opt.swapfile = false
 vim.opt.backup = false

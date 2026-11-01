@@ -69,3 +69,26 @@ Run `:ConformInfo` to see which formatter applies to the current buffer.
 
 Leader is `<Space>`. Every keymap has a description; press `<leader>vk` to
 search them with Telescope.
+
+A few to know:
+
+| Keys | Action |
+| --- | --- |
+| `<leader>gd` | Go to definition (a picker when there are several) |
+| `<leader>gr` | References |
+| `<leader>gi` / `<leader>go` | Incoming / outgoing calls: what calls this function, and what it calls |
+| `<leader>tw` | Toggle line wrap in the current window |
+
+## PR review
+
+Review a branch with full file context, instead of only the hunks GitHub shows:
+
+| Keys | Action |
+| --- | --- |
+| `<leader>hm` | Toggle review mode: diff every buffer against the merge base with the default branch, with line and word highlights and inline deleted lines |
+| `<leader>gp` | Pick from the PR's changed files (turns review mode on). The preview shows the whole file as a diff, and opening a file jumps to its first change |
+
+The comparison is the same as GitHub's "Files changed" tab: `HEAD` against its
+merge base with `origin/HEAD` (or `main` / `master`), so changes made only on
+the default branch don't show up. Gitsigns' hunk maps (`]c` / `[c`,
+`<leader>hp` to preview a hunk) work against that base while review mode is on.
