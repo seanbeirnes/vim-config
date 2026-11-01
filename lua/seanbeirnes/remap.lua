@@ -16,9 +16,6 @@ vim.keymap.set("n", "<leader>Y", [["+Y]], { desc = "Yank line to system clipboar
 
 vim.keymap.set({ "n", "v" }, "<leader>d", [["_d]], { desc = "Delete without yanking" })
 
--- lsp remaps
-vim.keymap.set("n", "<leader>gd", vim.lsp.buf.definition, { desc = "Go to definition" })
-
 vim.keymap.set(
     "n",
     "<leader>s",

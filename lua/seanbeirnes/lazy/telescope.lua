@@ -16,6 +16,7 @@ return {
         vim.keymap.set("n", "<leader>gp", function()
             require("seanbeirnes.review").pick()
         end, { desc = "PR review: changed files" })
+        vim.keymap.set("n", "<leader>gd", builtin.lsp_definitions, { desc = "Go to definition" })
         vim.keymap.set("n", "<leader>gr", builtin.lsp_references, { desc = "List references" })
         vim.keymap.set("n", "<leader>gi", builtin.lsp_incoming_calls, { desc = "Incoming calls" })
         vim.keymap.set("n", "<leader>go", builtin.lsp_outgoing_calls, { desc = "Outgoing calls" })
