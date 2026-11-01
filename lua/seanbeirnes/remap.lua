@@ -18,7 +18,6 @@ vim.keymap.set({ "n", "v" }, "<leader>d", [["_d]], { desc = "Delete without yank
 
 -- lsp remaps
 vim.keymap.set("n", "<leader>gd", vim.lsp.buf.definition, { desc = "Go to definition" })
-vim.keymap.set("n", "<leader>gr", vim.lsp.buf.references, { desc = "List references" })
 
 vim.keymap.set(
     "n",
