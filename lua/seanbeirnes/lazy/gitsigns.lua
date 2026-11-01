@@ -66,5 +66,9 @@ return {
                 map({ "o", "x" }, "ih", gitsigns.select_hunk, "Select git hunk")
             end,
         })
+
+        vim.keymap.set("n", "<leader>hm", function()
+            require("seanbeirnes.review").toggle()
+        end, { desc = "Toggle PR review mode (diff vs merge base)" })
     end,
 }
