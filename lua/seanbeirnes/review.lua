@@ -4,7 +4,12 @@
 -- changed files.
 local M = {}
 
-local state = { enabled = false, base = nil, branch = nil }
+local state = { enabled = false, base = nil, branch = nil, fetching = false }
+
+-- the fetch can run long in the background, but the picker blocks the UI
+-- while it waits, so it gives up sooner
+local FETCH_TIMEOUT_MS = 10000
+local PICK_WAIT_MS = 3000
 
 -- inline deleted lines; toggle_deleted is deprecated in gitsigns, so skip it
 -- quietly if a future version removes it
@@ -35,16 +40,67 @@ local function default_branch()
     end
 end
 
+local function merge_base_with(branch)
+    return git({ "merge-base", "HEAD", branch })
+end
+
 local function merge_base()
     local branch = default_branch()
     if not branch then
         return nil, nil, "no default branch found"
     end
-    local base = git({ "merge-base", "HEAD", branch })
+    local base = merge_base_with(branch)
     if not base then
         return nil, nil, "no merge base with " .. branch
     end
     return base, branch
+end
+
+-- Pulling only the feature branch leaves the remote-tracking default branch
+-- stale, which puts main's newer commits in the review diff. Fetch it without
+-- blocking, then move the review base if the merge base changed. Comparing
+-- merge bases rather than branch tips makes main advancing past the merge a
+-- no-op.
+local function refresh_base_in_background()
+    local remote, remote_branch = state.branch:match("^([^/]+)/(.+)$")
+    if not remote then
+        return
+    end
+    -- enable/disable replace the state table, so this marks only the session
+    -- that started the fetch
+    local session = state
+    session.fetching = true
+    vim.system({ "git", "fetch", "--quiet", "--no-tags", remote, remote_branch }, {
+        text = true,
+        timeout = FETCH_TIMEOUT_MS,
+        env = { GIT_TERMINAL_PROMPT = "0" },
+    }, function(result)
+        vim.schedule(function()
+            session.fetching = false
+            if result.code ~= 0 then
+                local reason = vim.split(vim.trim(result.stderr or ""), "\n")[1]
+                vim.notify(
+                    ("Review base not refreshed, fetching %s failed: %s"):format(
+                        session.branch,
+                        reason ~= "" and reason or "timed out"
+                    )
+                )
+            end
+            -- check the current session even after a failed fetch: toggling
+            -- off and on mid-fetch can make the newer fetch lose the ref lock
+            -- to the older one, whose session is gone
+            if not state.enabled then
+                return
+            end
+            local base = merge_base_with(state.branch)
+            if not base or base == state.base then
+                return
+            end
+            require("gitsigns").change_base(base, true)
+            state.base = base
+            vim.notify(("Review base updated after fetching %s (%s)"):format(state.branch, base:sub(1, 7)))
+        end)
+    end)
 end
 
 function M.enable()
@@ -60,6 +116,7 @@ function M.enable()
     set_deleted(gitsigns, true)
     state = { enabled = true, base = base, branch = branch }
     vim.notify(("Review mode on: diffing against %s (%s)"):format(branch, base:sub(1, 7)))
+    refresh_base_in_background()
     return true
 end
 
@@ -163,6 +220,15 @@ end
 function M.pick()
     if not state.enabled and not M.enable() then
         return
+    end
+    -- list files against the refreshed base, not the possibly stale one
+    if state.fetching then
+        local done = vim.wait(PICK_WAIT_MS, function()
+            return not state.fetching
+        end)
+        if not done then
+            vim.notify(("Review: still fetching %s, the list may include its newer code"):format(state.branch))
+        end
     end
     local base = state.base
 

@@ -92,3 +92,10 @@ The comparison is the same as GitHub's "Files changed" tab: `HEAD` against its
 merge base with `origin/HEAD` (or `main` / `master`), so changes made only on
 the default branch don't show up. Gitsigns' hunk maps (`]c` / `[c`,
 `<leader>hp` to preview a hunk) work against that base while review mode is on.
+
+Turning review mode on also fetches the default branch in the background, so a
+stale `origin/main` (for example after pulling a branch that had main merged
+into it on GitHub) doesn't put main's new code in the diff. If the merge base
+moves, the review base updates and you get a notification. If the fetch fails
+(offline, no access), you get a notification and the local ref stays in use.
+The file picker waits for the fetch, for up to a few seconds.
