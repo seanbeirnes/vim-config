@@ -11,6 +11,14 @@ local FETCH_TIMEOUT_MS = 10000
 -- the open changed-files picker, rebuilt when the review base moves
 local open_picker
 local refresh_open_picker
+-- file to keep selected once a rebuilt picker finishes loading its entries
+local reselect_path
+
+local function close_open_picker()
+    if open_picker and not open_picker.closed then
+        require("telescope.actions").close(open_picker.prompt_bufnr)
+    end
+end
 
 -- inline deleted lines; toggle_deleted is deprecated in gitsigns, so skip it
 -- quietly if a future version removes it
@@ -119,6 +127,8 @@ function M.enable()
 end
 
 function M.disable()
+    -- its previews and jumps diff against the review base, which is going away
+    close_open_picker()
     local gitsigns = require("gitsigns")
     gitsigns.reset_base(true)
     gitsigns.toggle_linehl(false)
@@ -265,14 +275,39 @@ local function files_finder(files)
     })
 end
 
+-- the file set and line counts depend on the base, so the entries are
+-- rebuilt; the selection stays on the same file so Enter doesn't open another
 refresh_open_picker = function()
-    if open_picker and not open_picker.closed then
-        open_picker:refresh(files_finder(changed_files(state.base)))
+    if not open_picker or open_picker.closed then
+        return
+    end
+    local files = changed_files(state.base)
+    if #files == 0 then
+        close_open_picker()
+        vim.notify("Review mode: no changes against " .. state.branch)
+        return
+    end
+    local selected = open_picker:get_selection()
+    reselect_path = selected and selected.path
+    open_picker:refresh(files_finder(files))
+end
+
+local function reselect_after_refresh(picker)
+    if not reselect_path then
+        return
+    end
+    local path = reselect_path
+    reselect_path = nil
+    for entry in picker.manager:iter() do
+        if entry.path == path then
+            picker:set_selection(picker:get_row(picker.manager:find_entry(entry)))
+            return
+        end
     end
 end
 
--- Telescope picker of files changed since the merge base, previewing each
--- file's full diff; selecting one turns review mode on and opens the file at
+-- Telescope picker of files changed since the merge base (turning review mode
+-- on first), previewing each file's full diff; selecting one opens the file at
 -- its first change. It opens on the current base without waiting for the
 -- background fetch, and rebuilds its list if that fetch moves the base.
 function M.pick()
@@ -327,7 +362,11 @@ function M.pick()
         }),
         attach_mappings = function(prompt_bufnr)
             actions.select_default:replace(function()
-                local file = action_state.get_selected_entry().value
+                local entry = action_state.get_selected_entry()
+                if not entry then
+                    return
+                end
+                local file = entry.value
                 actions.close(prompt_bufnr)
                 vim.cmd.edit(vim.fn.fnameescape(file.path))
                 if file.status ~= "?" then
@@ -341,7 +380,11 @@ function M.pick()
             return true
         end,
     })
-    open_picker:find()
+    local picker = open_picker
+    picker:register_completion_callback(function()
+        reselect_after_refresh(picker)
+    end)
+    picker:find()
 end
 
 return M
