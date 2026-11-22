@@ -4,12 +4,13 @@
 -- changed files.
 local M = {}
 
-local state = { enabled = false, base = nil, branch = nil, fetching = false }
+local state = { enabled = false, base = nil, branch = nil }
 
--- the fetch can run long in the background, but the picker blocks the UI
--- while it waits, so it gives up sooner
 local FETCH_TIMEOUT_MS = 10000
-local PICK_WAIT_MS = 3000
+
+-- the open changed-files picker, rebuilt when the review base moves
+local open_picker
+local refresh_open_picker
 
 -- inline deleted lines; toggle_deleted is deprecated in gitsigns, so skip it
 -- quietly if a future version removes it
@@ -66,29 +67,25 @@ local function refresh_base_in_background()
     if not remote then
         return
     end
-    -- enable/disable replace the state table, so this marks only the session
-    -- that started the fetch
-    local session = state
-    session.fetching = true
+    local fetched_branch = state.branch
     vim.system({ "git", "fetch", "--quiet", "--no-tags", remote, remote_branch }, {
         text = true,
         timeout = FETCH_TIMEOUT_MS,
         env = { GIT_TERMINAL_PROMPT = "0" },
     }, function(result)
         vim.schedule(function()
-            session.fetching = false
             if result.code ~= 0 then
                 local reason = vim.split(vim.trim(result.stderr or ""), "\n")[1]
                 vim.notify(
                     ("Review base not refreshed, fetching %s failed: %s"):format(
-                        session.branch,
+                        fetched_branch,
                         reason ~= "" and reason or "timed out"
                     )
                 )
             end
-            -- check the current session even after a failed fetch: toggling
-            -- off and on mid-fetch can make the newer fetch lose the ref lock
-            -- to the older one, whose session is gone
+            -- check the current review session even after a failed fetch:
+            -- toggling off and on mid-fetch can make the newer fetch lose the
+            -- ref lock to the older one, which already updated the ref
             if not state.enabled then
                 return
             end
@@ -98,6 +95,7 @@ local function refresh_base_in_background()
             end
             require("gitsigns").change_base(base, true)
             state.base = base
+            refresh_open_picker()
             vim.notify(("Review base updated after fetching %s (%s)"):format(state.branch, base:sub(1, 7)))
         end)
     end)
@@ -214,48 +212,23 @@ local function changed_files(base)
     return files
 end
 
--- Telescope picker of files changed since the merge base, previewing each
--- file's full diff; selecting one turns review mode on and opens the file at
--- its first change
-function M.pick()
-    if not state.enabled and not M.enable() then
-        return
-    end
-    -- list files against the refreshed base, not the possibly stale one
-    if state.fetching then
-        local done = vim.wait(PICK_WAIT_MS, function()
-            return not state.fetching
-        end)
-        if not done then
-            vim.notify(("Review: still fetching %s, the list may include its newer code"):format(state.branch))
-        end
-    end
-    local base = state.base
+local status_hl = { A = "GitSignsAdd", M = "GitSignsChange", R = "GitSignsChange", ["?"] = "GitSignsUntracked" }
 
-    local pickers = require("telescope.pickers")
+-- "+12 -3" line counts, or "bin" for binary files
+local function fmt_counts(file)
+    local c = file.counts
+    if not (c and c.added) then
+        return "bin", ""
+    end
+    return "+" .. c.added, "-" .. c.removed
+end
+
+-- Telescope finder over `files`, with the count columns sized to the widest
+local function files_finder(files)
     local finders = require("telescope.finders")
-    local previewers = require("telescope.previewers")
-    local conf = require("telescope.config").values
-    local actions = require("telescope.actions")
-    local action_state = require("telescope.actions.state")
     local entry_display = require("telescope.pickers.entry_display")
     local devicons_ok, devicons = pcall(require, "nvim-web-devicons")
 
-    local status_hl = { A = "GitSignsAdd", M = "GitSignsChange", R = "GitSignsChange", ["?"] = "GitSignsUntracked" }
-    local files = changed_files(base)
-    if #files == 0 then
-        vim.notify("Review mode: no changes against " .. state.branch)
-        return
-    end
-
-    -- "+12 -3" columns, sized to the widest count
-    local function fmt_counts(file)
-        local c = file.counts
-        if not (c and c.added) then
-            return "bin", ""
-        end
-        return "+" .. c.added, "-" .. c.removed
-    end
     local add_w, del_w = 0, 0
     for _, file in ipairs(files) do
         local a, d = fmt_counts(file)
@@ -266,81 +239,109 @@ function M.pick()
         items = { { width = 1 }, { width = 2 }, { width = add_w }, { width = del_w }, { remaining = true } },
     })
 
-    pickers
-        .new({}, {
-            prompt_title = ("PR changes vs %s"):format(state.branch),
-            finder = finders.new_table({
-                results = files,
-                entry_maker = function(file)
-                    local icon, icon_hl = " ", nil
-                    if devicons_ok then
-                        icon, icon_hl =
-                            devicons.get_icon(file.path, vim.fn.fnamemodify(file.path, ":e"), { default = true })
-                    end
-                    return {
-                        value = file,
-                        ordinal = file.path,
-                        path = file.path,
-                        display = function()
-                            local added, removed = fmt_counts(file)
-                            return displayer({
-                                { file.status, status_hl[file.status] },
-                                { icon, icon_hl },
-                                { added, "GitSignsAdd" },
-                                { removed, "GitSignsDelete" },
-                                file.path,
-                            })
-                        end,
-                    }
+    return finders.new_table({
+        results = files,
+        entry_maker = function(file)
+            local icon, icon_hl = " ", nil
+            if devicons_ok then
+                icon, icon_hl = devicons.get_icon(file.path, vim.fn.fnamemodify(file.path, ":e"), { default = true })
+            end
+            return {
+                value = file,
+                ordinal = file.path,
+                path = file.path,
+                display = function()
+                    local added, removed = fmt_counts(file)
+                    return displayer({
+                        { file.status, status_hl[file.status] },
+                        { icon, icon_hl },
+                        { added, "GitSignsAdd" },
+                        { removed, "GitSignsDelete" },
+                        file.path,
+                    })
                 end,
-            }),
-            sorter = conf.generic_sorter({}),
-            previewer = previewers.new_buffer_previewer({
-                title = "Diff (full file)",
-                define_preview = function(self, entry)
-                    local file = entry.value
-                    local lines, first_change
-                    if file.status == "?" then
-                        lines = vim.tbl_map(function(l)
-                            return "+" .. l
-                        end, vim.fn.readfile(file.path))
-                        first_change = { preview = 1 }
-                    else
-                        lines, first_change = full_diff(base, file.path, file.old_path)
-                    end
-                    vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
-                    require("telescope.previewers.utils").regex_highlighter(self.state.bufnr, "diff")
-                    if first_change then
-                        -- after Telescope finishes resetting the preview window
-                        local winid = self.state.winid
-                        vim.schedule(function()
-                            if vim.api.nvim_win_is_valid(winid) then
-                                pcall(vim.api.nvim_win_set_cursor, winid, { first_change.preview, 0 })
-                                vim.api.nvim_win_call(winid, function()
-                                    vim.cmd("normal! zz")
-                                end)
-                            end
-                        end)
-                    end
-                end,
-            }),
-            attach_mappings = function(prompt_bufnr)
-                actions.select_default:replace(function()
-                    local file = action_state.get_selected_entry().value
-                    actions.close(prompt_bufnr)
-                    vim.cmd.edit(vim.fn.fnameescape(file.path))
-                    if file.status ~= "?" then
-                        local _, first_change = full_diff(base, file.path, file.old_path)
-                        if first_change then
-                            pcall(vim.api.nvim_win_set_cursor, 0, { first_change.file, 0 })
-                            vim.cmd("normal! zz")
+            }
+        end,
+    })
+end
+
+refresh_open_picker = function()
+    if open_picker and not open_picker.closed then
+        open_picker:refresh(files_finder(changed_files(state.base)))
+    end
+end
+
+-- Telescope picker of files changed since the merge base, previewing each
+-- file's full diff; selecting one turns review mode on and opens the file at
+-- its first change. It opens on the current base without waiting for the
+-- background fetch, and rebuilds its list if that fetch moves the base.
+function M.pick()
+    if not state.enabled and not M.enable() then
+        return
+    end
+
+    local pickers = require("telescope.pickers")
+    local previewers = require("telescope.previewers")
+    local conf = require("telescope.config").values
+    local actions = require("telescope.actions")
+    local action_state = require("telescope.actions.state")
+
+    local files = changed_files(state.base)
+    if #files == 0 then
+        vim.notify("Review mode: no changes against " .. state.branch)
+        return
+    end
+
+    open_picker = pickers.new({}, {
+        prompt_title = ("PR changes vs %s"):format(state.branch),
+        finder = files_finder(files),
+        sorter = conf.generic_sorter({}),
+        previewer = previewers.new_buffer_previewer({
+            title = "Diff (full file)",
+            define_preview = function(self, entry)
+                local file = entry.value
+                local lines, first_change
+                if file.status == "?" then
+                    lines = vim.tbl_map(function(l)
+                        return "+" .. l
+                    end, vim.fn.readfile(file.path))
+                    first_change = { preview = 1 }
+                else
+                    lines, first_change = full_diff(state.base, file.path, file.old_path)
+                end
+                vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+                require("telescope.previewers.utils").regex_highlighter(self.state.bufnr, "diff")
+                if first_change then
+                    -- after Telescope finishes resetting the preview window
+                    local winid = self.state.winid
+                    vim.schedule(function()
+                        if vim.api.nvim_win_is_valid(winid) then
+                            pcall(vim.api.nvim_win_set_cursor, winid, { first_change.preview, 0 })
+                            vim.api.nvim_win_call(winid, function()
+                                vim.cmd("normal! zz")
+                            end)
                         end
-                    end
-                end)
-                return true
+                    end)
+                end
             end,
-        })
-        :find()
+        }),
+        attach_mappings = function(prompt_bufnr)
+            actions.select_default:replace(function()
+                local file = action_state.get_selected_entry().value
+                actions.close(prompt_bufnr)
+                vim.cmd.edit(vim.fn.fnameescape(file.path))
+                if file.status ~= "?" then
+                    local _, first_change = full_diff(state.base, file.path, file.old_path)
+                    if first_change then
+                        pcall(vim.api.nvim_win_set_cursor, 0, { first_change.file, 0 })
+                        vim.cmd("normal! zz")
+                    end
+                end
+            end)
+            return true
+        end,
+    })
+    open_picker:find()
 end
 
 return M

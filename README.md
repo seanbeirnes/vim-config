@@ -98,4 +98,4 @@ stale `origin/main` (for example after pulling a branch that had main merged
 into it on GitHub) doesn't put main's new code in the diff. If the merge base
 moves, the review base updates and you get a notification. If the fetch fails
 (offline, no access), you get a notification and the local ref stays in use.
-The file picker waits for the fetch, for up to a few seconds.
+The file picker opens right away and rebuilds its list if the base moves.
